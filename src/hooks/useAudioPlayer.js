@@ -1,62 +1,64 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
+// Asume songs: Array<{ src: string, ... }>. Si aun manejas array de strings,
+// cambia songs[currentTrackIndex] por songs[currentTrackIndex].src donde diga src.
 const useAudioPlayer = (songs) => {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const audioRef = useRef(new Audio(songs[currentTrackIndex]));
+  const audioRef = useRef(null);
+
+  if (audioRef.current === null) {
+    audioRef.current = new Audio();
+  }
+
+  const nextTrack = useCallback(() => {
+    setCurrentTrackIndex((prev) => (prev + 1) % songs.length);
+  }, [songs.length]);
+
+  const prevTrack = useCallback(() => {
+    setCurrentTrackIndex((prev) => (prev - 1 + songs.length) % songs.length);
+  }, [songs.length]);
+
+  // listeners: se registran una sola vez, no dependen de la pista actual
   useEffect(() => {
     const audio = audioRef.current;
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
-    };
-
-    const handleEnded = () => {
-      handleNextTrack();
-    };
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleEnded = () => nextTrack();
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("ended", handleEnded);
-
     return () => {
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [currentTrackIndex]);
+  }, [nextTrack]);
 
-  const handlePlayPause = () => {
+  const src = songs[currentTrackIndex]?.src;
+
+  // cambia el src SOLO cuando cambia de pista, nunca por isPlaying
+  useEffect(() => {
+    if (!src) return;
+    const audio = audioRef.current;
+    if (audio.src !== src) {
+      audio.src = src;
+      setCurrentTime(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrackIndex, songs]);
+
+  // play/pause responde solo a isPlaying, sin tocar el src
+  useEffect(() => {
+    if (!src) return;
     const audio = audioRef.current;
     if (isPlaying) {
-      audio.pause();
-    } else {
       audio.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleNextTrack = () => {
-    setCurrentTrackIndex((prevIndex) => (prevIndex + 1) % songs.length);
-    setIsPlaying(false);
-  };
-
-  const handlePrevTrack = () => {
-    setCurrentTrackIndex(
-      (prevIndex) => (prevIndex - 1 + songs.length) % songs.length,
-    );
-    setIsPlaying(false);
-  };
-
-  const togglePlay = () => setIsPlaying(!isPlaying);
-
-  useEffect(() => {
-    audioRef.current.src = songs[currentTrackIndex];
-    if (isPlaying) {
-      audioRef.current.play();
     } else {
-      audioRef.current.pause();
+      audio.pause();
     }
-  }, [currentTrackIndex, isPlaying, songs]);
+  }, [isPlaying, src]);
+
+  const togglePlay = () => setIsPlaying((prev) => !prev);
 
   return {
     isPlaying,
@@ -67,3 +69,5 @@ const useAudioPlayer = (songs) => {
     prevTrack,
   };
 };
+
+export default useAudioPlayer;
